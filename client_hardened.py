@@ -23,7 +23,7 @@ MODEL = sys.argv[1] if len(sys.argv) > 1 else "qwen3.5:2b"
 
 DB_SCHEMA = (
     "Tables:\n"
-    "  sessions(id, title, speaker, track, duration_min, room)\n"
+    "  sessions(id, title, speaker, track, day, start_time, duration_min, room)\n"
     "  models(name, params_b, size_gb, tool_call_pass_rate, avg_latency_ms, license)\n"
     "  deployments(id, org, model, use_case, transport, is_local)"
 )

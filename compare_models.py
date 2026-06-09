@@ -17,7 +17,7 @@ console = Console()
 MODELS = ["qwen3.5:2b", "gemma4:e2b"]
 
 DB_SCHEMA = (
-    "Tables: sessions(id, title, speaker, track, duration_min, room), "
+    "Tables: sessions(id, title, speaker, track, day, start_time, duration_min, room), "
     "models(name, params_b, size_gb, tool_call_pass_rate, avg_latency_ms, license), "
     "deployments(id, org, model, use_case, transport, is_local)"
 )
