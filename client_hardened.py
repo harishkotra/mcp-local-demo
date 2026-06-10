@@ -7,19 +7,28 @@ Patterns applied:
   2. CONSTRAIN THE SCHEMA    — SELECT-only pattern, city word limit
   3. SINGLE RESPONSIBILITY   — each tool does exactly one thing
   4. NEGATIVE SPACE          — "Does NOT INSERT/UPDATE/DELETE"
+  5. SANITIZE TOOL OUTPUT    — strip injected instructions from tool results
+
+Flags:
+  --trace   Print raw JSON-RPC messages (tools/list, tools/call, responses)
 """
 import asyncio
 import json
+import re
 import sys
+
+import anyio
 
 import ollama
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from rich.console import Console
 from rich.panel import Panel
+from rich.syntax import Syntax
 
 console = Console()
-MODEL = sys.argv[1] if len(sys.argv) > 1 else "qwen3.5:2b"
+MODEL  = next((a for a in sys.argv[1:] if not a.startswith("--")), "qwen3.5:2b")
+TRACE  = "--trace" in sys.argv
 
 DB_SCHEMA = (
     "Tables:\n"
@@ -60,7 +69,7 @@ HARDENED_TOOLS = [
                 "Run a read-only SQL SELECT query against the local conference database. "
                 f"{DB_SCHEMA}. "
                 "SELECT queries only — does NOT INSERT, UPDATE, or DELETE. "
-                "Example: \"SELECT title, speaker FROM sessions WHERE track = 'local-ai'\" "
+                "Example: \"SELECT title, speaker FROM sessions WHERE track = 'building-with-mcp'\" "
                 "Example: \"SELECT name, tool_call_pass_rate FROM models ORDER BY tool_call_pass_rate DESC\" "
                 "Example: \"SELECT org, use_case FROM deployments WHERE is_local = 1\""
             ),
@@ -111,9 +120,99 @@ HARDENED_TOOLS = [
 SUCCESS_PROMPTS = [
     "Which conference sessions are longer than 45 minutes?",
     "Do I have any notes about MCP transport?",
-    "Show me sessions about local AI and the weather in Bengaluru at the same time",
+    "Show me sessions on the building-with-mcp track and the weather in Bengaluru at the same time",
 ]
 
+# ── Pattern 5: Sanitize tool output ──────────────────────────────────────────
+
+INJECTION_PATTERNS = [
+    r"(?i)ignore (all |previous |prior )?instructions",
+    r"(?i)system (override|prompt|message)",
+    r"(?i)you are now",
+    r"(?i)maintenance mode",
+    r"(?i)important.*override",
+]
+
+
+def sanitize_tool_output(text: str) -> tuple[str, list[str]]:
+    """Remove lines matching injection patterns. Returns (clean_text, removed_lines)."""
+    lines   = text.split("\n")
+    clean   = []
+    removed = []
+    for line in lines:
+        if any(re.search(p, line) for p in INJECTION_PATTERNS):
+            removed.append(line)
+        else:
+            clean.append(line)
+    return "\n".join(clean), removed
+
+
+# ── JSON-RPC tracer ───────────────────────────────────────────────────────────
+
+def _trace_msg(direction: str, color: str, msg) -> None:
+    try:
+        if hasattr(msg, "model_dump"):
+            data = msg.model_dump(mode="json", exclude_none=True)
+        elif hasattr(msg, "__dict__"):
+            data = vars(msg)
+        else:
+            data = str(msg)
+        console.print(f"[{color}]{direction}[/{color}]")
+        console.print(Syntax(
+            json.dumps(data, indent=2, default=str)[:800],
+            "json", theme="monokai", word_wrap=True,
+        ))
+    except Exception:
+        pass
+
+
+class TracingStream:
+    """Wraps an MCP transport stream to pretty-print SessionMessage objects."""
+    def __init__(self, stream, direction: str, color: str):
+        self._stream    = stream
+        self._direction = direction
+        self._color     = color
+
+    async def receive(self):
+        msg = await self._stream.receive()
+        if TRACE:
+            _trace_msg(self._direction, self._color, msg)
+        return msg
+
+    async def send(self, msg):
+        if TRACE:
+            _trace_msg(self._direction, self._color, msg)
+        await self._stream.send(msg)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            msg = await self._stream.receive()
+        except (StopAsyncIteration, anyio.EndOfStream):
+            raise StopAsyncIteration
+        if TRACE:
+            _trace_msg(self._direction, self._color, msg)
+        return msg
+
+    # __anext__ is the async-iteration path; receive() is the direct-call path.
+    # Both log — that's intentional: the SDK uses one or the other, not both.
+
+    async def __aenter__(self):
+        if hasattr(self._stream, "__aenter__"):
+            await self._stream.__aenter__()
+        return self
+
+    async def __aexit__(self, *args):
+        if hasattr(self._stream, "__aexit__"):
+            await self._stream.__aexit__(*args)
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+# ── Main client logic ─────────────────────────────────────────────────────────
 
 async def run_with_mcp(session: ClientSession, prompt: str):
     console.print(f"\n[bold green]PROMPT:[/bold green] {prompt}")
@@ -137,13 +236,21 @@ async def run_with_mcp(session: ClientSession, prompt: str):
 
         try:
             result = await session.call_tool(tool_name, args)
-            text = result.content[0].text
-            results.append(text)
-            console.print(f"[green]✓ Result:[/green] {text[:300]}")
+            raw    = result.content[0].text
+            clean, removed = sanitize_tool_output(raw)
+
+            if removed:
+                console.print(Panel(
+                    "\n".join(f"[strike]{l}[/strike]" for l in removed),
+                    title="[red bold]✗ INJECTION ATTEMPT STRIPPED (Pattern 5: sanitize output)[/red bold]",
+                    border_style="red",
+                ))
+
+            results.append(clean)
+            console.print(f"[green]✓ Result:[/green] {clean[:300]}")
         except Exception as e:
             console.print(f"[red]✗ MCP error:[/red] {e}")
 
-    # Let model synthesize final answer from tool results
     if results:
         messages.append({
             "role": "assistant",
@@ -161,16 +268,25 @@ async def run_with_mcp(session: ClientSession, prompt: str):
 
 
 async def main():
+    mode_line = "Precise descriptions · schema constraints · output sanitization"
+    if TRACE:
+        mode_line += " · [yellow]JSON-RPC trace ON[/yellow]"
+
     console.print(Panel(
         f"[bold green]HARDENED CLIENT[/bold green]\n"
         f"Model: [cyan]{MODEL}[/cyan]\n"
-        f"Precise descriptions · schema constraints · examples · negative space",
+        f"{mode_line}",
         border_style="green",
     ))
 
     server_params = StdioServerParameters(command="python3", args=["server.py"])
 
     async with stdio_client(server_params) as (read, write):
+        # Wrap streams for tracing if --trace
+        if TRACE:
+            read  = TracingStream(read,  "← SERVER", "green")
+            write = TracingStream(write, "→ CLIENT", "cyan")
+
         async with ClientSession(read, write) as session:
             await session.initialize()
             for prompt in SUCCESS_PROMPTS:

@@ -83,7 +83,7 @@ FAILURE_PROMPTS = [
     "What's the weather in India's capital city and do I have any notes about it?",
 
     # Trigger: compound — model picks one tool, drops the other, or collapses
-    "Show me sessions about local AI and the weather in Bengaluru at the same time",
+    "Show me sessions on the building-with-mcp track and the weather in Bengaluru at the same time",
 ]
 
 # Strict rules a hardened server would enforce

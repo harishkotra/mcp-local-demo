@@ -19,15 +19,15 @@ echo ""
 case "$MODE" in
   naive)
     echo ">>> Naive client — expect failures"
-    python3 client_naive.py "$MODEL"
+    /Users/kotra/.venv/bin/python3 client_naive.py "$MODEL"
     ;;
   hardened)
     echo ">>> Hardened client — same model, better results"
-    python3 client_hardened.py "$MODEL"
+    /Users/kotra/.venv/bin/python3 client_hardened.py "$MODEL"
     ;;
   compare)
     echo ">>> Model comparison table"
-    python3 compare_models.py
+    /Users/kotra/.venv/bin/python3 compare_models.py
     ;;
   side-by-side)
     # Requires tmux

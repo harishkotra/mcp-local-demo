@@ -48,7 +48,7 @@ HARDENED_TOOLS = [
             "description": (
                 f"Run a read-only SQL SELECT query against the local conference database. {DB_SCHEMA}. "
                 "SELECT only — no INSERT/UPDATE/DELETE. "
-                "Example: \"SELECT title, speaker FROM sessions WHERE track = 'local-ai'\""
+                "Example: \"SELECT title, speaker FROM sessions WHERE track = 'building-with-mcp'\""
             ),
             "parameters": {
                 "type": "object",
@@ -86,7 +86,7 @@ HARDENED_TOOLS = [
 # (prompt, expected_tool, expected_arg_key)
 TEST_CASES = [
     ("What's the weather in Bengaluru?",                         "get_weather",    "city"),
-    ("Which sessions are in the local-ai track?",                "query_database", "sql_query"),
+    ("Which sessions are in the building-with-mcp track?",       "query_database", "sql_query"),
     ("Search my notes for MCP transport",                        "search_notes",   "query"),
     ("Show me all models with tool_call_pass_rate above 0.8",    "query_database", "sql_query"),
     ("Find notes about tool calling and schemas",                "search_notes",   "query"),
