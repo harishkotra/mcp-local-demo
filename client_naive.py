@@ -74,16 +74,17 @@ NAIVE_TOOLS = [
 ]
 
 FAILURE_PROMPTS = [
-    # Trigger: model hallucinates table name ("talks", "events", "talks_db")
-    # because naive desc gives zero schema info
-    "Which conference sessions are longer than 45 minutes?",
+    # Trigger: model hallucinates table name — "talks", "events", "agenda"
+    # "sessions" is the real table; prompt says "talks" to push model off track
+    "Which talks at this event run longer than 45 minutes?",
 
-    # Trigger: indirect city reference → model sends "New Delhi" or "India's capital"
-    # Naive desc has no format guidance; hardened says "e.g. 'Bengaluru'"
-    "What's the weather in India's capital city and do I have any notes about it?",
+    # Trigger: indirect city → model sends "India's tech capital", "Bangalore,India", or similar
+    # No format guidance in naive desc; wttr.in needs a plain city name
+    "What's the weather in India's tech capital right now? Also check if I have any notes about it.",
 
-    # Trigger: compound — model picks one tool, drops the other, or collapses
-    "Show me sessions on the building-with-mcp track and the weather in Bengaluru at the same time",
+    # Trigger: wrong track name — "local-ai" doesn't exist, real track is "building-with-mcp"
+    # Model guesses track name from prompt, gets zero rows, hallucinates answer
+    "What's on in the local-AI track today? Also what's the weather in Bengaluru?",
 ]
 
 # Strict rules a hardened server would enforce

@@ -118,9 +118,9 @@ HARDENED_TOOLS = [
 ]
 
 SUCCESS_PROMPTS = [
-    "Which conference sessions are longer than 45 minutes?",
-    "Do I have any notes about MCP transport?",
-    "Show me sessions on the building-with-mcp track and the weather in Bengaluru at the same time",
+    "Which talks at this event run longer than 45 minutes?",
+    "What's the weather in India's tech capital right now? Also check if I have any notes about it.",
+    "What's on in the local-AI track today? Also what's the weather in Bengaluru?",
 ]
 
 # ── Pattern 5: Sanitize tool output ──────────────────────────────────────────
